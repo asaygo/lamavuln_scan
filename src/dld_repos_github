@@ -1,0 +1,64 @@
+import os
+import requests
+import time
+
+ORG = "ORG_NAME"
+DEST_DIR = "repos_zip"
+PER_PAGE = 100
+
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+
+headers = {}
+if GITHUB_TOKEN:
+    headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"
+
+os.makedirs(DEST_DIR, exist_ok=True)
+
+page = 1
+repos = []
+
+while True:
+    url = f"https://api.github.com/orgs/{ORG}/repos"
+    params = {"per_page": PER_PAGE, "page": page}
+
+    r = requests.get(url, headers=headers, params=params)
+    r.raise_for_status()
+
+    data = r.json()
+    if not data:
+        break
+
+    repos.extend(data)
+    page += 1
+
+print(f"[+] Found {len(repos)} repositories")
+
+for repo in repos:
+    time.sleep(1)
+    name = repo["name"].lower()
+
+    if "example" in name or "test" in name:
+        print(f"[+] Skipping repo: {repo['name']}")
+        continue
+
+    default_branch = repo["default_branch"]
+    zip_url = f"https://github.com/{ORG}/{repo['name']}/archive/refs/heads/{default_branch}.zip"
+
+    output_path = os.path.join(DEST_DIR, f"{repo['name']}.zip")
+
+    if os.path.exists(output_path):
+        print(f"[-] Already downloaded: {repo['name']}")
+        continue
+
+    print(f"[+] Downloading {repo['name']}...")
+
+    with requests.get(zip_url, stream=True, headers=headers) as r:
+        r.raise_for_status()
+        with open(output_path, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
+    time.sleep(1)
+
+print("[+] All repositories downloaded")
